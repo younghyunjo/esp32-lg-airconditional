@@ -5,7 +5,14 @@
 extern "C" {
 #endif
 
+void lg_ac_temperature_set(int temperature);
+
+void lg_ac_off(void);
+void lg_ac_on(void);
+
 void lg_ac_inix(int tx_gpio);
+
+void lg_ac_receiver_start(int rx_gpio);
 
 #ifdef __cplusplus
 }

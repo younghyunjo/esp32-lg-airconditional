@@ -7,6 +7,40 @@
 
 #include "lg_ac_ir_config.h"
 
+#define CODE_OFF    0x88C0051
+#define CODE_ON_18  0x8800347
+#define CODE_ON_19  0x8800448
+#define CODE_ON_20  0x8800549
+#define CODE_ON_21  0x880064A
+#define CODE_ON_22  0x880074B
+#define CODE_ON_23  0x880084C
+#define CODE_ON_24  0x880094D
+#define CODE_ON_25  0x8800A4E
+#define CODE_ON_26  0x8800B4F
+#define CODE_ON_27  0x8800C50
+#define CODE_ON_28  0x8800D51
+#define CODE_ON_29  0x8800E52
+#define CODE_ON_30  0x8800F53
+
+#define TEMPERATURE_MIN 18
+#define TEMPERATURE_MAX 30
+
+const uint32_t TEMPERATURE_CODE[] = {
+    0x880834F
+    0x8808400
+    0x8808541
+    0x8808642
+    0x8808743
+    0x8808844
+    0x8808945
+    0x8808A46
+    0x8808B47
+    0x8808C48
+    0x8808D49
+    0x8808E4A
+    0x8808F4B
+};
+
 static inline void _fill_item_level(rmt_item32_t* item, int high_us, int low_us)
 {
     item->level0 = 1;
@@ -77,6 +111,26 @@ static void _tx_init(int gpio, int channel)
     rmt_tx.rmt_mode = 0;
     rmt_config(&rmt_tx);
     rmt_driver_install(rmt_tx.channel, 0, 0);
+}
+
+void lg_ac_temperature_set(int temperature)
+{
+    if (temperature < TEMPERATURE_MIN || temperature > TEMPERATURE_MAX) {
+        return;
+    }
+
+    uint32_t code = TEMPERATURE_CODE(temperature - TEMPERATURE_MIN);
+    _code_send(code);
+}
+
+void lg_ac_off(void)
+{
+    _code_send(CODE_OFF);
+}
+
+void lg_ac_on(void)
+{
+    _code_send(CODE_ON_18);
 }
 
 void lg_ac_init(int gpio)
