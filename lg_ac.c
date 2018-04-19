@@ -11,9 +11,9 @@
 #include "lg_ac_ir_config.h"
 #include "lg_ac.h"
 
-#define DEFERRED_OFF_INTEVAL   5 
-#define CODE_OFF    0x88C0051
+#define DEFERRED_OFF_INTEVAL   60
 
+#define CODE_OFF    0x88C0051
 const uint32_t CODE_TEMPERATURE_ON[] = {
     0x8800347,      /* 18 */
     0x8800448,      /* 19 */
@@ -29,7 +29,6 @@ const uint32_t CODE_TEMPERATURE_ON[] = {
     0x8800E52,      /* 29 */
     0x8800F53,      /* 30 */
 };
-
 const uint32_t CODE_TEMPERATURE_SET[] = {
     0x880834F,      /* 18 */
     0x8808400,      /* 19 */
