@@ -3,14 +3,15 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_log.h>
+#include <esp_types.h>
 #include <driver/rmt.h>
+#include <driver/timer.h>
+#include <soc/timer_group_struct.h>
 
 #include "lg_ac_ir_config.h"
+#include "lg_ac.h"
 
-
-#define TEMPERATURE_MIN 18
-#define TEMPERATURE_MAX 30
-
+#define DEFERRED_OFF_INTEVAL   5 
 #define CODE_OFF    0x88C0051
 
 const uint32_t CODE_TEMPERATURE_ON[] = {
@@ -44,6 +45,8 @@ const uint32_t CODE_TEMPERATURE_SET[] = {
     0x8808E4A,      /* 29 */
     0x8808F4B,      /* 30 */
 };
+
+static xQueueHandle deferred_queue;
 
 static inline void _fill_item_level(rmt_item32_t* item, int high_us, int low_us)
 {
@@ -117,27 +120,90 @@ static void _tx_init(int gpio, int channel)
     rmt_driver_install(rmt_tx.channel, 0, 0);
 }
 
-void lg_ac_temperature_set(int temperature)
+static void IRAM_ATTR _deferred_timer_isr(void *para)
 {
-    if (temperature < TEMPERATURE_MIN || temperature > TEMPERATURE_MAX) {
-        return;
+    TIMERG0.int_clr_timers.t0 = 1;
+    int off = true;
+    xQueueSendFromISR(deferred_queue, &off, NULL);
+}
+
+static void _deferred_off_timer_stop(void)
+{
+    timer_pause(TIMER_GROUP_0, TIMER_0);
+}
+
+static void _deferred_off_timer_start(void)
+{
+    timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0x00000000ULL);
+    timer_enable_intr(TIMER_GROUP_0, TIMER_0);
+    timer_start(TIMER_GROUP_0, TIMER_0);
+}
+
+static void _deferred_off_task(void *arg)
+{
+    while (1) {
+        int off;
+        xQueueReceive(deferred_queue, &off, portMAX_DELAY);
+        if (off) {
+            printf("[LG_AC] DEFERRED OFF\n");
+            _code_send(CODE_OFF);
+        }
+    }
+}
+
+static void _deferred_timer_init(void)
+{
+#define TIMER_DIVIDER         16
+#define TIMER_SCALE           (TIMER_BASE_CLK / TIMER_DIVIDER)  // convert counter value to seconds
+
+    timer_config_t config;
+    config.divider = TIMER_DIVIDER;
+    config.counter_dir = TIMER_COUNT_UP;
+    config.counter_en = TIMER_PAUSE;
+    config.alarm_en = TIMER_ALARM_EN;
+    config.intr_type = TIMER_INTR_LEVEL;
+    config.auto_reload = false;
+    timer_init(TIMER_GROUP_0, TIMER_0, &config);
+
+    timer_isr_register(TIMER_GROUP_0, TIMER_0, _deferred_timer_isr, 
+            (void *)TIMER_0, ESP_INTR_FLAG_IRAM, NULL);
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, DEFERRED_OFF_INTEVAL * TIMER_SCALE);
+}
+
+static void _deferred_off_init(void)
+{
+    deferred_queue = xQueueCreate(5, sizeof(int));
+    _deferred_timer_init();
+    xTaskCreate(_deferred_off_task, "lg_ac_deferred_ac_off_task", 2048, NULL, 5, NULL);
+}
+
+int lg_ac_temperature_set(int temperature)
+{
+    printf("[LG_AC] TEMPERATURE SET:%d\n", temperature);
+
+    if (temperature < LG_AC_TEMPERATURE_MIN || temperature > LG_AC_TEMPERATURE_MAX) {
+        return -1;
     }
 
-    uint32_t code = CODE_TEMPERATURE_SET[temperature - TEMPERATURE_MIN];
-    _code_send(code);
+    _deferred_off_timer_stop();
+    _code_send(CODE_TEMPERATURE_SET[temperature - LG_AC_TEMPERATURE_MIN]);
+    return 0;
 }
 
 void lg_ac_off(void)
 {
-    _code_send(CODE_OFF);
+    lg_ac_temperature_set(30);
+    _deferred_off_timer_start();
 }
 
 void lg_ac_on(void)
 {
+    _deferred_off_timer_stop();
     _code_send(CODE_TEMPERATURE_ON[0]);
 }
 
 void lg_ac_init(int gpio)
 {
     _tx_init(gpio, RMT_TX_CHANNEL);
+    _deferred_off_init();
 }
