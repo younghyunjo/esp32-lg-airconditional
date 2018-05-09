@@ -1,11 +1,15 @@
 #include <stdio.h>
 #include <string.h>
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <esp_log.h>
-#include <esp_types.h>
+
+#include <driver/gpio.h>
 #include <driver/rmt.h>
 #include <driver/timer.h>
+#include <esp_log.h>
+#include <esp_types.h>
+
 #include <soc/timer_group_struct.h>
 
 #include "lg_ac_ir_config.h"
@@ -102,6 +106,9 @@ static void _code_send(uint32_t code)
 
 static void _tx_init(int gpio, int channel)
 {
+    gpio_pad_select_gpio(gpio);
+    gpio_set_direction(gpio, GPIO_MODE_OUTPUT);
+
     rmt_config_t rmt_tx;
     rmt_tx.channel = channel;
     rmt_tx.gpio_num = gpio;
